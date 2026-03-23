@@ -1,0 +1,24 @@
+# ── statusline config ─────────────────────────────────────────
+
+[prompt]
+# Prompt character (shown at the start of the input line)
+char = "❯"
+
+[components]
+# Toggle individual prompt components on/off
+git       = true
+venv      = true
+node      = true
+jobs      = true
+exit_code = true
+context   = true    # SSH user@host
+
+[git]
+# Toggle individual git segments
+branch       = true
+worktree     = true
+tracking     = true
+ahead_behind = true
+file_status  = true
+diff_lines   = true
+hash_time    = true
