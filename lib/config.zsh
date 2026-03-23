@@ -27,9 +27,9 @@ _statusline_load_config() {
       # strip surrounding quotes
       val="${val%\"}"
       val="${val#\"}"
-      # trim whitespace
-      val="${val## }"
-      val="${val%% }"
+      # trim leading/trailing whitespace
+      val="${val#"${val%%[! ]*}"}"
+      val="${val%"${val##*[! ]}"}"
       STATUSLINE_CFG[${section}.${key}]="$val"
     fi
   done < "$cfg_file"

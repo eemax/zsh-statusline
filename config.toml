@@ -8,17 +8,18 @@ char = "❯"
 # Toggle individual prompt components on/off
 git       = true
 venv      = true
-node      = true
+lang      = true    # language + runtime version
 jobs      = true
 exit_code = true
 context   = true    # SSH user@host
 
 [git]
 # Toggle individual git segments
-branch       = true
-worktree     = true
-tracking     = true
-ahead_behind = true
-file_status  = true
-diff_lines   = true
-hash_time    = true
+branch          = true
+worktree        = true
+tracking        = true
+ahead_behind    = true
+clean_dirty     = true
+hash_time       = true
+commit_count    = 3     # number of recent commits to show (0 to disable)
+commit_truncate = 30    # max chars for commit message before truncation

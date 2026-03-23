@@ -58,53 +58,38 @@ _git_hash_and_time() {
   echo "${DIM}🔖 ${hash} ⏱️  ${age}${RESET}"
 }
 
-_git_file_status() {
-  local staged=0 modified=0 deleted=0 untracked=0 conflicted=0 renamed=0
+_git_clean_dirty() {
+  local dirty=0
 
   while IFS= read -r line; do
     case "$line" in
-      "1 "*)
-        local x=${line:2:1} y=${line:3:1}
-        [[ "$x" != "." ]] && case "$x" in
-          A|M|D) (( staged++ ));;
-          R)     (( renamed++ ));;
-        esac
-        [[ "$y" != "." ]] && case "$y" in
-          M) (( modified++ ));;
-          D) (( deleted++  ));;
-        esac
-        ;;
-      "2 "*) (( staged++ ));;
-      "u "*) (( conflicted++ ));;
-      "? "*) (( untracked++  ));;
+      "1 "*|"2 "*|"u "*|"? "*) (( dirty++ ));;
     esac
   done < <(git status --porcelain=v2 2>/dev/null)
 
-  local out="" any=0
+  if (( dirty == 0 )); then
+    echo "${G}clean${RESET}"
+  else
+    local added removed
+    read -r added removed < <(git diff --numstat 2>/dev/null \
+      | awk '{a+=$1; d+=$2} END {print a+0, d+0}')
+    # include staged diff too
+    local sa sr
+    read -r sa sr < <(git diff --cached --numstat 2>/dev/null \
+      | awk '{a+=$1; d+=$2} END {print a+0, d+0}')
+    (( added += sa ))
+    (( removed += sr ))
 
-  (( staged     > 0 )) && { out+="${G}staged:${staged}${RESET} ";               any=1; }
-  (( renamed    > 0 )) && { out+="${C}renamed:${renamed}${RESET} ";             any=1; }
-  (( modified   > 0 )) && { out+="${Y}modified:${modified}${RESET} ";           any=1; }
-  (( deleted    > 0 )) && { out+="${R}deleted:${deleted}${RESET} ";             any=1; }
-  (( untracked  > 0 )) && { out+="${DIM}untracked:${untracked}${RESET} ";       any=1; }
-  (( conflicted > 0 )) && { out+="${R}${BOLD}conflict:${conflicted}${RESET} ";  any=1; }
-
-  (( any == 0 )) && out="✨"
-
-  echo "${out% }"
-}
-
-_git_diff_lines() {
-  local added removed
-  read -r added removed < <(git diff --numstat 2>/dev/null \
-    | awk '{a+=$1; d+=$2} END {print a+0, d+0}')
-  (( added == 0 && removed == 0 )) && return
-  local out="${DIM}(${RESET}"
-  (( added   > 0 )) && out+="${G}+${added}${RESET}"
-  (( added   > 0 && removed > 0 )) && out+="${DIM}/${RESET}"
-  (( removed > 0 )) && out+="${R}-${removed}${RESET}"
-  out+="${DIM})${RESET}"
-  echo "$out"
+    local out="${Y}dirty${RESET}"
+    if (( added > 0 || removed > 0 )); then
+      out+=" ${DIM}(${RESET}"
+      (( added   > 0 )) && out+="${G}+${added}${RESET}"
+      (( added   > 0 && removed > 0 )) && out+="${DIM}/${RESET}"
+      (( removed > 0 )) && out+="${R}-${removed}${RESET}"
+      out+="${DIM})${RESET}"
+    fi
+    echo "$out"
+  fi
 }
 
 # ── main git block ────────────────────────────────────────────
@@ -113,23 +98,61 @@ prompt_git() {
   _git_repo || return
   _statusline_enabled "components.git" || return
 
-  local branch worktree tracking ahead_behind hash_time files diff
+  local branch worktree tracking ahead_behind clean_dirty
 
   _statusline_enabled "git.branch"       && branch=$(_git_branch)
   _statusline_enabled "git.worktree"     && worktree=$(_git_worktree)
   _statusline_enabled "git.tracking"     && tracking=$(_git_tracking)
   _statusline_enabled "git.ahead_behind" && ahead_behind=$(_git_ahead_behind)
-  _statusline_enabled "git.hash_time"    && hash_time=$(_git_hash_and_time)
-  _statusline_enabled "git.file_status"  && files=$(_git_file_status)
-  _statusline_enabled "git.diff_lines"   && diff=$(_git_diff_lines)
+  _statusline_enabled "git.clean_dirty"  && clean_dirty=$(_git_clean_dirty)
 
-  local out="${M}${BOLD}🪾 ${branch}${RESET}"
-  [[ -n "$worktree"     ]] && out+=" ${worktree}"
-  [[ -n "$tracking"     ]] && out+=" ${tracking}"
-  [[ -n "$ahead_behind" ]] && out+=" ${ahead_behind}"
-  [[ -n "$files"        ]] && out+=" ${files}"
-  [[ -n "$diff"         ]] && out+=" ${diff}"
-  [[ -n "$hash_time"    ]] && out+=" ${hash_time}"
+  local sep=" ${DIM}•${RESET} "
+  local parts=()
+  [[ -n "$branch"       ]] && parts+=("${M}${BOLD}${branch}${RESET}")
+  [[ -n "$worktree"     ]] && parts+=("${worktree}")
+  [[ -n "$tracking"     ]] && parts+=("${tracking}")
+  [[ -n "$ahead_behind" ]] && parts+=("${ahead_behind}")
+  [[ -n "$clean_dirty"  ]] && parts+=("${clean_dirty}")
 
+  local out=""
+  for (( i=1; i<=${#parts[@]}; i++ )); do
+    (( i > 1 )) && out+="${sep}"
+    out+="${parts[$i]}"
+  done
   echo "$out"
+}
+
+_git_commits() {
+  _git_repo || return
+  _statusline_enabled "components.git" || return
+
+  local count=${STATUSLINE_CFG[git.commit_count]:-3}
+  local trunc=${STATUSLINE_CFG[git.commit_truncate]:-30}
+  (( count == 0 )) && return
+
+  local now hash ts msg age diff display_msg rest over
+  now=$(date +%s)
+
+  while IFS= read -r line; do
+    hash=${line%% *}
+    rest=${line#* }
+    ts=${rest%% *}
+    msg=${rest#* }
+
+    diff=$(( now - ts ))
+    if   (( diff < 3600   )); then age="$((diff / 60))m ago"
+    elif (( diff < 86400  )); then age="$((diff / 3600))h ago"
+    elif (( diff < 604800 )); then age="$((diff / 86400))d ago"
+    else                           age="$((diff / 604800))w ago"
+    fi
+
+    if (( ${#msg} > trunc )); then
+      over=$(( ${#msg} - trunc ))
+      display_msg="[${msg:0:$trunc}...+${over} chars]"
+    else
+      display_msg="[${msg}]"
+    fi
+
+    echo "${DIM}${hash} ${display_msg} ${age}${RESET}"
+  done < <(git log --format="%h %ct %s" -"${count}" --reverse 2>/dev/null)
 }
