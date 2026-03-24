@@ -41,7 +41,7 @@ build_prompt() {
   PROMPT="
 ${commits:+${commits}
 }${line1}
-${last_line}${char} "
+${last_line}${M}${BOLD}${char}${RESET} "
 }
 
 precmd() { build_prompt }

@@ -14,9 +14,7 @@ _git_worktree() {
   git_dir=$(git rev-parse --git-dir 2>/dev/null) || return
   common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
   if [[ "$git_dir" != "$common_dir" ]]; then
-    local name
-    name=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
-    echo "${DIM}🌲 ${name}${RESET}"
+    echo "${M}🌲${RESET}"
   fi
 }
 
@@ -24,7 +22,7 @@ _git_tracking() {
   local upstream
   upstream=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null)
   if [[ -z "$upstream" ]]; then
-    echo "${Y}🔒 local${RESET}"
+    echo "${DIM}local${RESET}"
   else
     local remote=${upstream%%/*}
     [[ "$remote" != "origin" ]] && echo "${M}📡 ${remote}${RESET}"
@@ -100,14 +98,14 @@ _git_clean_dirty() {
     local out="${Y}dirty${RESET}"
     (( f_new > 0 )) && out+=" ${G}new${DIM}(${RESET}${G}${f_new}${RESET}${DIM})${RESET}"
     (( f_mod > 0 )) && out+=" ${Y}m${DIM}(${RESET}${Y}${f_mod}${RESET}${DIM})${RESET}"
-    (( f_unt > 0 )) && out+=" ${DIM}u(${f_unt})${RESET}"
+    (( f_unt > 0 )) && out+=" ${C}u${DIM}(${RESET}${C}${f_unt}${RESET}${DIM})${RESET}"
     if (( f_del > 0 || f_ren > 0 )); then
-      out+=" ${R}d${DIM}/${RESET}${C}r${DIM}(${RESET}"
-      out+="${R}${f_del}${RESET}${DIM}/${RESET}${C}${f_ren}${RESET}"
+      out+=" ${R}d${DIM}/${RESET}${Y}r${DIM}(${RESET}"
+      out+="${R}${f_del}${RESET}${DIM}/${RESET}${Y}${f_ren}${RESET}"
       out+="${DIM})${RESET}"
     fi
     if (( added > 0 || removed > 0 )); then
-      out+=" ${DIM}(${RESET}"
+      out+=" ${DIM}diff(${RESET}"
       (( added   > 0 )) && out+="${G}+${added}${RESET}"
       (( added   > 0 && removed > 0 )) && out+="${DIM}/${RESET}"
       (( removed > 0 )) && out+="${R}-${removed}${RESET}"
@@ -132,10 +130,13 @@ prompt_git() {
   _statusline_enabled "git.clean_dirty"  && clean_dirty=$(_git_clean_dirty)
 
   local sep=" ${DIM}•${RESET} "
+  # combine branch + tracking into one section (no dot separator)
+  local branch_section="${M}${branch}${RESET}"
+  [[ -n "$tracking" ]] && branch_section+=" ${tracking}"
+  [[ -n "$worktree" ]] && branch_section+=" ${worktree}"
+
   local parts=()
-  [[ -n "$branch"       ]] && parts+=("${M}${BOLD}${branch}${RESET}")
-  [[ -n "$worktree"     ]] && parts+=("${worktree}")
-  [[ -n "$tracking"     ]] && parts+=("${tracking}")
+  [[ -n "$branch"       ]] && parts+=("${branch_section}")
   [[ -n "$ahead_behind" ]] && parts+=("${ahead_behind}")
   [[ -n "$clean_dirty"  ]] && parts+=("${clean_dirty}")
 

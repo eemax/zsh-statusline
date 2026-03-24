@@ -21,5 +21,5 @@ tracking        = true
 ahead_behind    = true
 clean_dirty     = true
 hash_time       = true
-commit_count    = 3     # number of recent commits to show (0 to disable)
+commit_count    = 1     # number of recent commits to show (0 to disable)
 commit_truncate = 30    # max chars for commit message before truncation
