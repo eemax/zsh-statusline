@@ -1,22 +1,36 @@
 # ── shell components ──────────────────────────────────────────
+# All functions set REPLY instead of echo to avoid subshell forks.
 
 prompt_exit_code() {
-  echo "%(?..${R}❌ %?${RESET} )"
+  REPLY="%(?..${R}❌ %?${RESET} )"
 }
 
 prompt_dir() {
-  echo "${C}${BOLD}%(4~|%-1~/…/%2~|%~)${RESET}"
+  REPLY="${C}${BOLD}%(4~|%-1~/…/%2~|%~)${RESET}"
 }
 
 prompt_context() {
-  [[ -n "$SSH_CONNECTION" ]] && echo "${DIM}🔐 %n@%m${RESET} "
+  REPLY=""
+  [[ -n "$SSH_CONNECTION" ]] && REPLY="${DIM}🔐 %n@%m${RESET} "
 }
 
 prompt_venv() {
-  [[ -n "$VIRTUAL_ENV" ]] && echo "${DIM}🐍 $(basename $VIRTUAL_ENV)${RESET} "
+  REPLY=""
+  [[ -n "$VIRTUAL_ENV" ]] && REPLY="${DIM}🐍 ${VIRTUAL_ENV##*/}${RESET} "
 }
 
+typeset -g _LANG_CACHE_PWD="" _LANG_CACHE_VAL=""
+
 prompt_lang() {
+  REPLY=""
+
+  # return cached result if still in same directory
+  if [[ "$PWD" == "$_LANG_CACHE_PWD" ]]; then
+    REPLY="$_LANG_CACHE_VAL"
+    return
+  fi
+  _LANG_CACHE_PWD="$PWD"
+
   local lang="" ver=""
 
   if [[ -f package.json ]] || [[ -f .nvmrc ]]; then
@@ -39,15 +53,15 @@ prompt_lang() {
     ver=$(ruby -v 2>/dev/null) && ver="${ver#ruby }" && ver="${ver%% *}"
   fi
 
-  [[ -z "$lang" ]] && return
-
-  if [[ -n "$ver" ]]; then
-    echo "${DIM}${lang} ${ver}${RESET}"
-  else
-    echo "${DIM}${lang}${RESET}"
+  if [[ -n "$lang" && -n "$ver" ]]; then
+    REPLY="${DIM}${lang} ${ver}${RESET}"
+  elif [[ -n "$lang" ]]; then
+    REPLY="${DIM}${lang}${RESET}"
   fi
+
+  _LANG_CACHE_VAL="$REPLY"
 }
 
 prompt_jobs() {
-  echo "%(1j.${Y}⚙️ %j${RESET} .)"
+  REPLY="%(1j.${Y}⚙️ %j${RESET} .)"
 }

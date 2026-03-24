@@ -61,9 +61,7 @@ branch       = true
 worktree     = true
 tracking     = true
 ahead_behind = true
-file_status  = true
-diff_lines   = true
-hash_time    = true
+clean_dirty  = true
 ```
 
 Changes take effect in new shell sessions (or after `source ~/.zshrc`).

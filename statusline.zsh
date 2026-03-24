@@ -4,6 +4,7 @@
 
 setopt PROMPT_SUBST
 autoload -U colors && colors
+zmodload zsh/datetime
 
 # Resolve the directory this script lives in
 STATUSLINE_DIR="${0:A:h}"

@@ -7,36 +7,38 @@ build_prompt() {
   # ── line 1 parts ──
   local parts=()
   local ctx=""
-  _statusline_enabled "components.context" && ctx="$(prompt_context)"
-  # dir (with context prefix if SSH)
-  parts+=("${ctx}$(prompt_dir)")
+  if _statusline_enabled "components.context"; then
+    prompt_context; ctx="$REPLY"
+  fi
+  prompt_dir; parts+=("${ctx}${REPLY}")
 
   # git parts (already •-delimited internally)
-  local git_out=""
-  git_out="$(prompt_git)"
-  [[ -n "$git_out" ]] && parts+=("${git_out}")
+  prompt_git
+  [[ -n "$REPLY" ]] && parts+=("$REPLY")
 
   # language + runtime version
-  local lang=""
-  _statusline_enabled "components.lang" && lang="$(prompt_lang)"
-  [[ -n "$lang" ]] && parts+=("${lang}")
+  if _statusline_enabled "components.lang"; then
+    prompt_lang
+    [[ -n "$REPLY" ]] && parts+=("$REPLY")
+  fi
 
   # join line 1
-  local line1=""
-  for (( i=1; i<=${#parts[@]}; i++ )); do
-    (( i > 1 )) && line1+="${sep}"
-    line1+="${parts[$i]}"
-  done
+  local line1="${(pj: ${DIM}•${RESET} :)parts}"
 
   # ── commit lines ──
-  local commits=""
-  commits="$(_git_commits)"
+  _git_commits; local commits="$REPLY"
 
   # ── last line ──
   local last_line=""
-  _statusline_enabled "components.venv"      && last_line+="$(prompt_venv)"
-  _statusline_enabled "components.jobs"      && last_line+="$(prompt_jobs)"
-  _statusline_enabled "components.exit_code" && last_line+="$(prompt_exit_code)"
+  if _statusline_enabled "components.venv"; then
+    prompt_venv; last_line+="$REPLY"
+  fi
+  if _statusline_enabled "components.jobs"; then
+    prompt_jobs; last_line+="$REPLY"
+  fi
+  if _statusline_enabled "components.exit_code"; then
+    prompt_exit_code; last_line+="$REPLY"
+  fi
 
   PROMPT="
 ${commits:+${commits}

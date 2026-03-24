@@ -1,35 +1,41 @@
 # ── git ───────────────────────────────────────────────────────
+# All functions set REPLY instead of echo to avoid subshell forks.
+# Cache layer: _git_cache_init runs shared git commands once per render.
 
-_git_repo() {
-  git rev-parse --git-dir &>/dev/null
+typeset -g _GIT_DIR="" _GIT_COMMON_DIR="" _GIT_HEAD_SHORT=""
+
+_git_cache_init() {
+  _GIT_DIR=$(git rev-parse --git-dir 2>/dev/null) || return 1
+  _GIT_COMMON_DIR=$(git rev-parse --git-common-dir 2>/dev/null)
+  _GIT_HEAD_SHORT=$(git rev-parse --short HEAD 2>/dev/null)
 }
 
 _git_branch() {
-  git symbolic-ref --short HEAD 2>/dev/null \
-    || git rev-parse --short HEAD 2>/dev/null
+  REPLY=$(git symbolic-ref --short HEAD 2>/dev/null) \
+    || REPLY="$_GIT_HEAD_SHORT"
 }
 
 _git_worktree() {
-  local git_dir common_dir
-  git_dir=$(git rev-parse --git-dir 2>/dev/null) || return
-  common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
-  if [[ "$git_dir" != "$common_dir" ]]; then
-    echo "${M}🌲${RESET}"
+  REPLY=""
+  if [[ "$_GIT_DIR" != "$_GIT_COMMON_DIR" ]]; then
+    REPLY="${M}🌲${RESET}"
   fi
 }
 
 _git_tracking() {
+  REPLY=""
   local upstream
   upstream=$(git rev-parse --abbrev-ref @{upstream} 2>/dev/null)
   if [[ -z "$upstream" ]]; then
-    echo "${DIM}local${RESET}"
+    REPLY="${DIM}local${RESET}"
   else
     local remote=${upstream%%/*}
-    [[ "$remote" != "origin" ]] && echo "${M}📡 ${remote}${RESET}"
+    [[ "$remote" != "origin" ]] && REPLY="${M}📡 ${remote}${RESET}"
   fi
 }
 
 _git_ahead_behind() {
+  REPLY=""
   local counts
   counts=$(git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null)
   [[ -z "$counts" ]] && return
@@ -39,24 +45,11 @@ _git_ahead_behind() {
   (( ahead  > 0 )) && out+="${G}ahead ${ahead}${RESET}"
   (( ahead  > 0 && behind > 0 )) && out+="${DIM} / ${RESET}"
   (( behind > 0 )) && out+="${R}behind ${behind}${RESET}"
-  echo "$out"
-}
-
-_git_hash_and_time() {
-  local hash t now diff age
-  hash=$(git rev-parse --short HEAD 2>/dev/null) || return
-  t=$(git log -1 --format="%ct" 2>/dev/null)
-  now=$(date +%s)
-  diff=$(( now - t ))
-  if   (( diff < 3600   )); then age="$((diff / 60))m ago"
-  elif (( diff < 86400  )); then age="$((diff / 3600))h ago"
-  elif (( diff < 604800 )); then age="$((diff / 86400))d ago"
-  else                           age="$((diff / 604800))w ago"
-  fi
-  echo "${DIM}🔖 ${hash} ⏱️  ${age}${RESET}"
+  REPLY="$out"
 }
 
 _git_clean_dirty() {
+  REPLY=""
   local dirty=0 f_new=0 f_mod=0 f_del=0 f_ren=0 f_unt=0
 
   while IFS= read -r line; do
@@ -83,17 +76,13 @@ _git_clean_dirty() {
   done < <(git status --porcelain=v2 2>/dev/null)
 
   if (( dirty == 0 )); then
-    echo "${G}clean${RESET}"
+    REPLY="${G}clean${RESET}"
   else
-    local added removed
-    read -r added removed < <(git diff --numstat 2>/dev/null \
-      | awk '{a+=$1; d+=$2} END {print a+0, d+0}')
-    # include staged diff too
-    local sa sr
-    read -r sa sr < <(git diff --cached --numstat 2>/dev/null \
-      | awk '{a+=$1; d+=$2} END {print a+0, d+0}')
-    (( added += sa ))
-    (( removed += sr ))
+    local added=0 removed=0 a d
+    while IFS=$'\t' read -r a d _rest; do
+      [[ "$a" == "-" ]] && continue
+      (( added += a, removed += d ))
+    done < <(git diff HEAD --numstat 2>/dev/null)
 
     local out="${Y}dirty${RESET}"
     (( f_new > 0 )) && out+=" ${G}new${DIM}(${RESET}${G}${f_new}${RESET}${DIM})${RESET}"
@@ -111,23 +100,34 @@ _git_clean_dirty() {
       (( removed > 0 )) && out+="${R}-${removed}${RESET}"
       out+="${DIM})${RESET}"
     fi
-    echo "$out"
+    REPLY="$out"
   fi
 }
 
 # ── main git block ────────────────────────────────────────────
 
 prompt_git() {
-  _git_repo || return
+  REPLY=""
+  _git_cache_init || return
   _statusline_enabled "components.git" || return
 
-  local branch worktree tracking ahead_behind clean_dirty
+  local branch="" worktree="" tracking="" ahead_behind="" clean_dirty=""
 
-  _statusline_enabled "git.branch"       && branch=$(_git_branch)
-  _statusline_enabled "git.worktree"     && worktree=$(_git_worktree)
-  _statusline_enabled "git.tracking"     && tracking=$(_git_tracking)
-  _statusline_enabled "git.ahead_behind" && ahead_behind=$(_git_ahead_behind)
-  _statusline_enabled "git.clean_dirty"  && clean_dirty=$(_git_clean_dirty)
+  if _statusline_enabled "git.branch"; then
+    _git_branch; branch="$REPLY"
+  fi
+  if _statusline_enabled "git.worktree"; then
+    _git_worktree; worktree="$REPLY"
+  fi
+  if _statusline_enabled "git.tracking"; then
+    _git_tracking; tracking="$REPLY"
+  fi
+  if _statusline_enabled "git.ahead_behind"; then
+    _git_ahead_behind; ahead_behind="$REPLY"
+  fi
+  if _statusline_enabled "git.clean_dirty"; then
+    _git_clean_dirty; clean_dirty="$REPLY"
+  fi
 
   local sep=" ${DIM}•${RESET} "
   # combine branch + tracking into one section (no dot separator)
@@ -140,24 +140,21 @@ prompt_git() {
   [[ -n "$ahead_behind" ]] && parts+=("${ahead_behind}")
   [[ -n "$clean_dirty"  ]] && parts+=("${clean_dirty}")
 
-  local out=""
-  for (( i=1; i<=${#parts[@]}; i++ )); do
-    (( i > 1 )) && out+="${sep}"
-    out+="${parts[$i]}"
-  done
-  echo "$out"
+  REPLY="${(pj: ${DIM}•${RESET} :)parts}"
 }
 
 _git_commits() {
-  _git_repo || return
+  REPLY=""
+  [[ -z "$_GIT_DIR" ]] && return
   _statusline_enabled "components.git" || return
 
   local count=${STATUSLINE_CFG[git.commit_count]:-3}
   local trunc=${STATUSLINE_CFG[git.commit_truncate]:-30}
   (( count == 0 )) && return
 
-  local now hash ts msg age diff display_msg rest over
-  now=$(date +%s)
+  local now=$EPOCHSECONDS
+  local hash ts msg age diff display_msg rest over
+  local lines=""
 
   while IFS= read -r line; do
     hash=${line%% *}
@@ -179,6 +176,10 @@ _git_commits() {
       display_msg="[${msg}]"
     fi
 
-    echo "${DIM}${hash} ${display_msg} ${age}${RESET}"
+    lines+="${DIM}${hash} ${display_msg} ${age}${RESET}
+"
   done < <(git log --format="%h %ct %s" -"${count}" --reverse 2>/dev/null)
+
+  # remove trailing newline
+  REPLY="${lines%$'\n'}"
 }
