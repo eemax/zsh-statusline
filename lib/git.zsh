@@ -59,11 +59,28 @@ _git_hash_and_time() {
 }
 
 _git_clean_dirty() {
-  local dirty=0
+  local dirty=0 f_new=0 f_mod=0 f_del=0 f_ren=0 f_unt=0
 
   while IFS= read -r line; do
     case "$line" in
-      "1 "*|"2 "*|"u "*|"? "*) (( dirty++ ));;
+      "1 "*)
+        (( dirty++ ))
+        local xy=${line:2:2}
+        [[ "$xy" == A* || "$xy" == *A ]] && (( f_new++ ))
+        [[ "$xy" == M* || "$xy" == *M ]] && (( f_mod++ ))
+        [[ "$xy" == D* || "$xy" == *D ]] && (( f_del++ ))
+        ;;
+      "2 "*)
+        (( dirty++ ))
+        (( f_ren++ ))
+        ;;
+      "u "*)
+        (( dirty++ ))
+        ;;
+      "? "*)
+        (( dirty++ ))
+        (( f_unt++ ))
+        ;;
     esac
   done < <(git status --porcelain=v2 2>/dev/null)
 
@@ -81,6 +98,14 @@ _git_clean_dirty() {
     (( removed += sr ))
 
     local out="${Y}dirty${RESET}"
+    (( f_new > 0 )) && out+=" ${G}new${DIM}(${RESET}${G}${f_new}${RESET}${DIM})${RESET}"
+    (( f_mod > 0 )) && out+=" ${Y}m${DIM}(${RESET}${Y}${f_mod}${RESET}${DIM})${RESET}"
+    (( f_unt > 0 )) && out+=" ${DIM}u(${f_unt})${RESET}"
+    if (( f_del > 0 || f_ren > 0 )); then
+      out+=" ${R}d${DIM}/${RESET}${C}r${DIM}(${RESET}"
+      out+="${R}${f_del}${RESET}${DIM}/${RESET}${C}${f_ren}${RESET}"
+      out+="${DIM})${RESET}"
+    fi
     if (( added > 0 || removed > 0 )); then
       out+=" ${DIM}(${RESET}"
       (( added   > 0 )) && out+="${G}+${added}${RESET}"
